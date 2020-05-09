@@ -193,8 +193,6 @@ def retrieve_stock_info(ticker_name, errored_tickers):
 
     curr_stock = Stock(yf_object, ticker_name)
     assert curr_stock != None
-    curr_stock.errored = True
-    curr_stock.error_message = "YAYAY rgh ieufiu h eriuih  qreui"
     return curr_stock
 
 
