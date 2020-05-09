@@ -22,6 +22,9 @@ from datetime import date, timedelta
 # import yfinance as yf
 from yahoofinancials import YahooFinancials
 
+# for writing data out to csv file for inspection
+import csv
+
 # Class for each individual stock gotten from yahoofinance library
 # Functions: Constructor,
 # Attributes:
@@ -33,18 +36,23 @@ from yahoofinancials import YahooFinancials
 #
 class Stock:
 
-    # method that returns true or false depending on if week and month
-    # prices work
+    # method that returns true or false depending on if current price is
+    # less than a factor of week and month prices
     def set_angel_status(self):
         # MACRO checking for 20%drop in month or week
-        if (self.month_price * 0.9 >= self.current_price) or (
-            self.week_price * 0.9 >= self.current_price
+        loss_factor = 0.9
+
+        adj_week_price = self.month_price * loss_factor
+        adj_month_price = self.week_price * loss_factor
+
+        if (adj_week_price >= self.current_price) or (
+            adj_month_price >= self.current_price
         ):
             return True
         else:
             return False
 
-    # - method that returns the today in datetime object.
+    # - method that returns the most reecent open market day in datetime object.
     # - If weekend returns most recent friday. Also accounts for holidays and
     # goes back to most recent open day.
     # - Uses: list_holidays.txt which is a .txt file w/ all nyse holidays
@@ -55,6 +63,7 @@ class Stock:
         if today.strftime("%y") > "21":
             print("WARNING, NYSE holidays no longer accounted for after 2021")
 
+        # creating hash tables to store all nyse holidays
         holidays = dict()
         earlyday = dict()
         with open("list_holidays.txt") as openFile:
@@ -78,8 +87,16 @@ class Stock:
         # deal with if in current open market. perhaps calls already account.
         return today
 
-    # Description: constructor that makes calls from yahoofinance object to
-    #             populate stocks attributes.
+    # Description: constructor that makes calls to yahoofinance library to
+    #             populate stocks attributes:
+    #                       -boolean errored
+    #                       -float month_price
+    #                       -string month_date
+    #                       -float week_price
+    #                       -string week_date
+    #                       -boolean angel_status
+    #                       -string ticker
+    #                       -yahoofinance object object
     # Parameters: curr_stock-yahoofinance object; ticker_symbol-string of ticker
     #
     def __init__(self, curr_stock, ticker_symbol):
@@ -94,43 +111,42 @@ class Stock:
                 start_date, end_date, "daily"
             )
         except Exception:  # maybe somehow generalize exceptions
-            print(
-                ticker_symbol
-                + "new error from getting historical data from object"
-            )
             self.errored = True
+            # use error_message to store error message
+            self.error_message = "E: getting historical date from object"
             return
 
         if len(historical_price_data[ticker_symbol]) == 1:
-            print("found no info, yahoo finance page empty")
+            self.error_message = (
+                "E: price data returned 1 field yf page empty",
+            )
             self.errored = True
             return
         elif len(historical_price_data[ticker_symbol]["prices"]) == 0:
-            print("found no info, yahoo finance page empty")
+            self.error_message = "E: no prices returned, yf page empty"
             self.errored = True
             return
 
         try:
             stock_prices = historical_price_data[ticker_symbol]["prices"]
         except Exception:
-            print(
-                ticker_symbol
-                + "new error from retrieving prices from historical data"
-            )
+            self.error_message = "E: retrieving prices from array"
             self.errored = True
             return
 
         # could become function that returns array of size two, month/week price
 
         closing_prices = []
+        closing_dates = []
         for i in range(0, len(stock_prices), 1):
             # extracts only closing price from all the object w/ dates, etc.
             closing_prices.append(stock_prices[i]["close"])
-        # if len isn't 5 or 6 then it didn't get a months worth of time
-        # assert len(closing_prices) == 5 or len(closing_prices) == 6
+            closing_dates.append(stock_prices[i]["formatted_date"])
 
         self.month_price = closing_prices[0]
+        self.month_date = closing_dates[0]
         self.week_price = closing_prices[14]
+        self.week_date = closing_dates[14]
         price_dict = curr_stock.get_current_price()
         self.current_price = price_dict[ticker_symbol]
         self.angel_status = self.set_angel_status()
@@ -176,9 +192,9 @@ def retrieve_stock_info(ticker_name, errored_tickers):
         return None
 
     curr_stock = Stock(yf_object, ticker_name)
-
-    if curr_stock.errored == True:
-        return None
+    assert curr_stock != None
+    curr_stock.errored = True
+    curr_stock.error_message = "YAYAY rgh ieufiu h eriuih  qreui"
     return curr_stock
 
 
@@ -195,18 +211,52 @@ errored_tickers = []
 # stores all stocks we find that match our criteria for a 'fallen angel'.
 angels = []
 
-for i in range(len(tickers)):  # for limit with requests
+# filename for data analysis
+filename = "stock-stats.csv"
+# header for columns in csv sheet
+headers = [
+    "Stock Name",
+    "Month Price",
+    "Month Date",
+    "Week Price",
+    "Week Date",
+    "Current Price",
+    "Angel Status",
+]
+# list to store all lists of each stock data
+rows = []
+
+for i in range(5):  # for limit with requests
     temp_symbol = tickers[i].rstrip("\n")
     curr_stock = retrieve_stock_info(temp_symbol, errored_tickers)
-    print("got number " + str(i) + " " + temp_symbol)
+    if i % 50 == 0:
+        print(str(i / 5) + "% done")
     # if returned None then the function errored at a certain try block
-    if curr_stock == None:
+    if curr_stock.errored == True:
         errored_tickers.append(temp_symbol)
+        curr_row = [temp_symbol, "ERRORED", curr_stock.error_message]
+        rows.append(curr_row)
         continue
     # add it to our list of angels
     elif curr_stock.angel_status == True:
         angels.append(curr_stock)
+    curr_row = [
+        curr_stock.ticker,
+        curr_stock.month_price,
+        curr_stock.month_date,
+        curr_stock.week_price,
+        curr_stock.week_date,
+        curr_stock.current_price,
+        curr_stock.angel_status,
+    ]
+    rows.append(curr_row)
 
 print("\n These are the angels:")
 for stock in angels:
     print(stock.ticker)
+
+
+with open(filename, "w", newline="") as csvfile:
+    csvwriter = csv.writer(csvfile)
+    csvwriter.writerow(headers)
+    csvwriter.writerows(rows)
