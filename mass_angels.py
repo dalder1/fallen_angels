@@ -4,9 +4,12 @@
 # Created: 12/23/2019
 # Last Editied: 12/23/2019
 # Author: Daniel Alderman
-# Email: daniel.alderman@tufts.edu
+# email daniel.alderman@tufts.edu
 # -----------------------------------------------------------
 
+# ------------------------------------------------------------
+# MACRO checking for 20%drop in month or week
+# ------------------------------------------------------------
 
 # to scrape wikipedia for tickers
 import bs4 as bs
@@ -26,16 +29,10 @@ import csv
 # Functions: Constructor,
 # Attributes:
 #           -errored: boolean if there was an error retrieving some data
-#           -current_price: close price of most recent trading day
-#           -current_date: date of current_price in string
-#           -month_price: closing price from 28 days ago (wknd adj.)
-#           -month_date: date of month_price in string
-#           -week_price: closing price from 5 days ago (wknd adj.)
-#           -week_date: date of week_price in string
-#           -object: yahoofinancials object for this stock
-#           -angel_status: boolean if it passess current criteria for an angel
-#           -error_message: string with error message if errored is true
-#           -ticker: string with ticker of stock info stored in this instance
+#           -current_price: current price as float unrounded
+#           -month_price: from mon 4 wks ago not counting current wk(exc. Fri)
+#           -week_price: from mon 1 wk ago not counting current wk(exc.Fri)
+#           -angel status: boolean if it passess current criteria for an angel
 #
 class Stock:
 
@@ -43,7 +40,7 @@ class Stock:
     # less than a factor of week and month prices
     def set_angel_status(self):
         # MACRO checking for 20%drop in month or week
-        loss_factor = 0.8
+        loss_factor = 0.9
 
         adj_week_price = self.month_price * loss_factor
         adj_month_price = self.week_price * loss_factor
@@ -56,36 +53,32 @@ class Stock:
             return False
 
     # Description: constructor that makes calls to yahoofinance library to
-    #             populate stocks attributes
+    #             populate stocks attributes:
+    #                       -boolean errored
+    #                       -float month_price
+    #                       -string month_date
+    #                       -float week_price
+    #                       -string week_date
+    #                       -boolean angel_status
+    #                       -string ticker
+    #                       -yahoofinance object object
     # Parameters: curr_stock-yahoofinance object; ticker_symbol-string of ticker
     #
-    def __init__(self, curr_stock, ticker_symbol, start_date, end_date):
+    def __init__(self, ticker_symbol, historical_price_data):
 
-        try:
-            # retrieving dict with all historical price data for this stock
-            historical_price_data = curr_stock.get_historical_price_data(
-                start_date, end_date, "daily"
-            )
-        except Exception:
-            self.errored = True
-            # use error_message to store error message
-            self.error_message = "E: getting historical date from object"
-            return
-
-        if len(historical_price_data[ticker_symbol]) == 1:
+        if len(historical_price_data) == 1:
             self.error_message = (
-                "E: price data returned 1 field yf page empty",
+                "E: price data returned 1 field yf page probably empty",
             )
             self.errored = True
             return
-        elif len(historical_price_data[ticker_symbol]["prices"]) == 0:
-            self.error_message = "E: no prices returned, yf page empty"
+        elif len(historical_price_data["prices"]) == 0:
+            self.error_message = "E: no prices returned, yf page probably empty"
             self.errored = True
             return
 
         try:
-            # getting the prices and associated info from the dict
-            stock_prices = historical_price_data[ticker_symbol]["prices"]
+            stock_prices = historical_price_data["prices"]
         except Exception:
             self.error_message = "E: retrieving prices from array"
             self.errored = True
@@ -94,9 +87,13 @@ class Stock:
         closing_prices = []
         closing_dates = []
         for i in range(0, len(stock_prices), 1):
-            # extracts only closing price and date from all the objects.
+            # extracts only closing price from all the object w/ dates, etc.
             closing_prices.append(stock_prices[i]["close"])
+            # extracts dates from all the objects
             closing_dates.append(stock_prices[i]["formatted_date"])
+
+        assert len(closing_dates) == 20
+        assert len(closing_prices) == 20
 
         self.month_price = closing_prices[0]
         self.month_date = closing_dates[0]
@@ -107,33 +104,80 @@ class Stock:
         self.angel_status = self.set_angel_status()
         self.errored = False
         self.ticker = ticker_symbol
-        self.object = curr_stock
 
+    # Function called to get more info after we know it's an angel
     # def_get_advanced_info
 
 
 # method that makes api call to tiingo to retrieve price close for
 # for today and one month ago today. Returns an object that contains
 # these prices and the ticker name, as well as the entire json file
-def retrieve_stock_info(ticker_name, errored_tickers):
+def retrieve_stock_info(errored_tickers, tickers, angels):
 
     # stock object we will return
     curr_stock = None
-
-    try:
-        # call to library to get object
-        yf_object = YahooFinancials(ticker_name)
-    except Exception:
-        print(ticker_name + "new error from getting object from library")
-        return None
-
+    # call to library to get object
+    yf_object = YahooFinancials(tickers)
     today = get_today()
-    start_date = (today - timedelta(days=28)).strftime("%Y-%m-%d")
+    lastMonth = today - timedelta(days=28)
+    start_date = lastMonth.strftime("%Y-%m-%d")
     end_date = today.strftime("%Y-%m-%d")
 
-    curr_stock = Stock(yf_object, ticker_name, start_date, end_date)
-    assert curr_stock != None
-    return curr_stock
+    try:
+        print("getting historical prices")
+        historical_price_data = yf_object.get_historical_price_data(
+            start_date, end_date, "daily"
+        )
+    except Exception:
+        print("error from getting data from library")
+        return None
+
+    rows = []
+    print("getting individual stock stats")
+    for symbol in tickers:
+        curr_stock = Stock(symbol, historical_price_data[symbol])
+        if curr_stock.errored == True:
+            errored_tickers.append(symbol)
+            curr_row = [symbol, "ERRORED", curr_stock.error_message]
+            rows.append(curr_row)
+            continue
+        # add it to our list of angels
+        elif curr_stock.angel_status == True:
+            angels.append(curr_stock)
+        curr_row = [
+            curr_stock.ticker,
+            curr_stock.month_price,
+            curr_stock.month_date,
+            curr_stock.week_price,
+            curr_stock.week_date,
+            curr_stock.current_price,
+            curr_stock.angel_status,
+        ]
+        rows.append(curr_row)
+    print("got all stock info")
+    return rows
+
+
+# method that scrapes tickers of every s%p 500 stock and adds them to a list
+# this method is based off a script described by sentdex in a youtube tutorial
+# Return:  list of strings
+#
+def sp500_tickers(errored_tickers):
+    # opening wikipedia article to be scraped
+    resp = requests.get(
+        "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    )
+    soup = bs.BeautifulSoup(resp.text, "lxml")
+    table = soup.find("table", {"class": "wikitable sortable"})
+    tickers = []
+    # isolate each ticker and then add it to list
+    for row in table.findAll("tr")[1:]:
+        ticker = row.findAll("td")[0].text
+        ticker = ticker.rstrip("\n")
+        if ticker in errored_tickers:
+            continue
+        tickers.append(ticker)
+    return tickers
 
 
 # - method that returns the most reecent open market day in datetime object.
@@ -172,35 +216,11 @@ def get_today():
     return today
 
 
-# method that scrapes tickers of every s%p 500 stock and adds them to a list
-# this method is based off a script described by sentdex in a youtube tutorial
-# Return:  list of strings
-#
-def sp500_tickers(errored_tickers):
-    # opening wikipedia article to be scraped
-    resp = requests.get(
-        "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-    )
-    soup = bs.BeautifulSoup(resp.text, "lxml")
-    table = soup.find("table", {"class": "wikitable sortable"})
-    tickers = []
-    # isolate each ticker and then add it to list
-    for row in table.findAll("tr")[1:]:
-        ticker = row.findAll("td")[0].text
-        ticker = ticker.rstrip("\n")
-        # if we already know it errors do not add it to the list of tickers
-        if ticker in errored_tickers:
-            continue
-        tickers.append(ticker)
-    return tickers
-
-
 #
 #
 # Main Function
 #
 #
-
 
 # stores all stocks that we could not find pull yfinance data for
 errored_tickers = dict()
@@ -208,12 +228,19 @@ errored_tickers = dict()
 errored_tickers["BF.B"] = True
 errored_tickers["BRK.B"] = True
 
+
 # fills tickers list with every stock symbol in s&p 500
 tickers = sp500_tickers(errored_tickers)
-# stores all stocks that we could not find pull yfinance data for
 
 # stores all stocks we find that match our criteria for a 'fallen angel'.
 angels = []
+
+# list to store all lists of each stock data
+rows = retrieve_stock_info(errored_tickers, tickers, angels)
+assert rows
+print("\n These are the angels:")
+for stock in angels:
+    print(stock.ticker)
 
 # filename for data analysis
 filename = "stock-stats.csv"
@@ -225,44 +252,8 @@ headers = [
     "Week Price",
     "Week Date",
     "Current Price",
-    "Current Date",
-    "Current Date" "Angel Status",
+    "Angel Status",
 ]
-# list to store all lists of each stock data
-rows = []
-
-for i in range(len(tickers)):  # for limit with requests
-    temp_symbol = tickers[i]
-    curr_stock = retrieve_stock_info(temp_symbol, errored_tickers)
-    # if returned None then the function errored at a certain try block
-    if curr_stock.errored == True:
-        errored_tickers[temp_symbol] = True
-        curr_row = [temp_symbol, "ERRORED", curr_stock.error_message]
-        rows.append(curr_row)
-        continue
-    # add it to our list of angels
-    elif curr_stock.angel_status == True:
-        angels.append(curr_stock)
-    curr_row = [
-        curr_stock.ticker,
-        curr_stock.month_price,
-        curr_stock.month_date,
-        curr_stock.week_price,
-        curr_stock.week_date,
-        curr_stock.current_price,
-        curr_stock.current_date,
-        curr_stock.angel_status,
-    ]
-    rows.append(curr_row)
-
-print("\n These were not tracked due to ERRORS:")
-for key in errored_tickers:
-    print(key)
-
-print("\n These are the angels:")
-for stock in angels:
-    print(stock.ticker)
-
 with open(filename, "w", newline="") as csvfile:
     csvwriter = csv.writer(csvfile)
     csvwriter.writerow(headers)
