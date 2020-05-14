@@ -11,6 +11,8 @@
 # MACRO checking for 20%drop in month or week
 # ------------------------------------------------------------
 
+import time
+
 # to scrape wikipedia for tickers
 import bs4 as bs
 import requests
@@ -124,7 +126,7 @@ def retrieve_stock_info(errored_tickers, tickers, angels):
     end_date = today.strftime("%Y-%m-%d")
 
     try:
-        print("getting historical prices")
+        # print("getting historical prices")
         historical_price_data = yf_object.get_historical_price_data(
             start_date, end_date, "daily"
         )
@@ -133,7 +135,7 @@ def retrieve_stock_info(errored_tickers, tickers, angels):
         return None
 
     rows = []
-    print("getting individual stock stats")
+    # print("getting individual stock stats")
     for symbol in tickers:
         curr_stock = Stock(symbol, historical_price_data[symbol])
         if curr_stock.errored == True:
@@ -154,7 +156,8 @@ def retrieve_stock_info(errored_tickers, tickers, angels):
             curr_stock.angel_status,
         ]
         rows.append(curr_row)
-    print("got all stock info")
+    #
+    # print("got all stock info")
     return rows
 
 
@@ -222,6 +225,9 @@ def get_today():
 #
 #
 
+start = time.perf_counter()
+print("At the beginning of the calculation")
+print("Processor time (in seconds):", start, "\n")
 # stores all stocks that we could not find pull yfinance data for
 errored_tickers = dict()
 # stocks known to error
@@ -238,9 +244,9 @@ angels = []
 # list to store all lists of each stock data
 rows = retrieve_stock_info(errored_tickers, tickers, angels)
 assert rows
-print("\n These are the angels:")
-for stock in angels:
-    print(stock.ticker)
+# print("\n These are the angels:")
+# for stock in angels:
+#    print(stock.ticker)
 
 # filename for data analysis
 filename = "stock-stats.csv"
@@ -258,3 +264,9 @@ with open(filename, "w", newline="") as csvfile:
     csvwriter = csv.writer(csvfile)
     csvwriter.writerow(headers)
     csvwriter.writerows(rows)
+
+end = time.perf_counter()
+
+print("\nAt the end of the calculation")
+print("Processor time (in seconds):", end)
+print("Time elapsed during the calculation:", end - start)

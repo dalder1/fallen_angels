@@ -32,7 +32,6 @@ import csv
 #           -month_date: date of month_price in string
 #           -week_price: closing price from 5 days ago (wknd adj.)
 #           -week_date: date of week_price in string
-#           -object: yahoofinancials object for this stock
 #           -angel_status: boolean if it passess current criteria for an angel
 #           -error_message: string with error message if errored is true
 #           -ticker: string with ticker of stock info stored in this instance
@@ -42,6 +41,7 @@ class Stock:
     # method that returns true or false depending on if current price is
     # less than a factor of week and month prices
     def set_angel_status(self):
+
         # MACRO checking for 20%drop in month or week
         loss_factor = 0.8
 
@@ -54,6 +54,32 @@ class Stock:
             return True
         else:
             return False
+
+    # method that returns true or false depending on if current price is
+    # less than a factor of week and month prices
+    def get_extra_info(self, curr_stock):
+        temp_data = curr_stock.get_key_statistics_data()
+        ticker_symbol = curr_stock.ticker[0]  # for some rzn its list of len 1
+        key_data = temp_data[ticker_symbol]
+        self.test_pe = curr_stock.get_pe_ratio()
+        self.price_book = key_data["priceToBook"]
+        income = key_data["netIncomeToCommon"]
+        shares = key_data["sharesOutstanding"]
+        eps = income / shares
+        self.price_earnings = self.current_price / eps
+
+        temp_sheet = curr_stock.get_financial_stmts("quarterly", "balance")
+        temp2 = temp_sheet["balanceSheetHistoryQuarterly"]
+        temp3 = temp2[ticker_symbol]
+        temp4 = temp3[0]
+        for key in temp4:
+            balance_sheet = temp4[key]
+        temp_finance_data = curr_stock.get_financial_data()
+        finance_data = temp_finance_data[ticker_symbol]
+        self.current_ratio = finance_data["currentRatio"]
+        assets = balance_sheet["totalCurrentAssets"]
+        debt = finance_data["totalDebt"]
+        self.debt_to_assets = assets / debt
 
     # Description: constructor that makes calls to yahoofinance library to
     #             populate stocks attributes
@@ -104,32 +130,28 @@ class Stock:
         self.week_date = closing_dates[14]
         self.current_price = closing_prices[19]
         self.current_date = closing_dates[19]
-        self.angel_status = self.set_angel_status()
-        self.errored = False
         self.ticker = ticker_symbol
-        self.object = curr_stock
-
-    # def_get_advanced_info
+        self.angel_status = self.set_angel_status()
+        if self.angel_status == True:
+            self.get_extra_info(curr_stock)
+        self.errored = False
 
 
 # method that makes api call to tiingo to retrieve price close for
 # for today and one month ago today. Returns an object that contains
 # these prices and the ticker name, as well as the entire json file
-def retrieve_stock_info(ticker_name, errored_tickers):
+def retrieve_stock_info(ticker_name, errored_tickers, start_date, end_date):
 
     # stock object we will return
     curr_stock = None
 
     try:
+
         # call to library to get object
         yf_object = YahooFinancials(ticker_name)
     except Exception:
         print(ticker_name + "new error from getting object from library")
         return None
-
-    today = get_today()
-    start_date = (today - timedelta(days=28)).strftime("%Y-%m-%d")
-    end_date = today.strftime("%Y-%m-%d")
 
     curr_stock = Stock(yf_object, ticker_name, start_date, end_date)
     assert curr_stock != None
@@ -226,23 +248,34 @@ headers = [
     "Week Date",
     "Current Price",
     "Current Date",
-    "Current Date" "Angel Status",
+    "Current Date",
+    "Angel Status",
+    "P/E Ratio",
+    "Price to Book",
+    "Current Ratio",
+    "Debt to Current Assets",
 ]
 # list to store all lists of each stock data
 rows = []
 
+today = get_today()
+start_date = (today - timedelta(days=28)).strftime("%Y-%m-%d")
+end_date = today.strftime("%Y-%m-%d")
+
 for i in range(len(tickers)):  # for limit with requests
     temp_symbol = tickers[i]
-    curr_stock = retrieve_stock_info(temp_symbol, errored_tickers)
+    curr_stock = retrieve_stock_info(
+        temp_symbol, errored_tickers, start_date, end_date
+    )
+    if i % 50 == 0:
+        print(str(i / 5) + "% done")
     # if returned None then the function errored at a certain try block
     if curr_stock.errored == True:
         errored_tickers[temp_symbol] = True
         curr_row = [temp_symbol, "ERRORED", curr_stock.error_message]
         rows.append(curr_row)
         continue
-    # add it to our list of angels
-    elif curr_stock.angel_status == True:
-        angels.append(curr_stock)
+
     curr_row = [
         curr_stock.ticker,
         curr_stock.month_price,
@@ -253,6 +286,14 @@ for i in range(len(tickers)):  # for limit with requests
         curr_stock.current_date,
         curr_stock.angel_status,
     ]
+
+    if curr_stock.angel_status == True:
+        angels.append(curr_stock)
+        curr_row.append(curr_stock.price_earnings)
+        curr_row.append(curr_stock.price_book)
+        curr_row.append(curr_stock.current_ratio)
+        curr_row.append(curr_stock.debt_to_assets)
+
     rows.append(curr_row)
 
 print("\n These were not tracked due to ERRORS:")
