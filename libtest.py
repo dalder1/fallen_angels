@@ -2,6 +2,8 @@ import bs4 as bs
 import requests
 import pprint
 
+import email_test
+
 # for getting current date, needed to check stock prices
 from datetime import date, timedelta
 
@@ -13,17 +15,25 @@ from yahoofinancials import YahooFinancials
 import csv
 
 
-tickers = "AAPL"
+tickers = [
+    ["AAPL"],
+    ["V"],
+    ["MMM"],
+    ["GE"],
+    ["TSLA"],
+    ["ABT"],
+]
+"""
+tickers.append("AAPL")
+tickers.append("V")
+tickers.append("MMM")
+tickers.append("GE")
+tickers.append("TSLA")
+tickers.append("ABT")
+tickers.append("MRK")
+"""
 
-yf_object = YahooFinancials(tickers)
-
-
-temp_sheet = yf_object.get_financial_stmts("quarterly", "balance")
-temp2 = temp_sheet["balanceSheetHistoryQuarterly"]
-temp3 = temp2[tickers]
-
-pp = pprint.PrettyPrinter(indent=1)
-pp.pprint(temp3)
+email_test.send_email(tickers)
 
 
 exit()

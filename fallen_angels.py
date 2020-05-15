@@ -7,6 +7,7 @@
 # Email: daniel.alderman@tufts.edu
 # -----------------------------------------------------------
 
+import email_export
 
 # to scrape wikipedia for tickers
 import bs4 as bs
@@ -35,15 +36,18 @@ import csv
 #           -angel_status: boolean if it passess current criteria for an angel
 #           -error_message: string with error message if errored is true
 #           -ticker: string with ticker of stock info stored in this instance
+#          *-current_ratio: float of (curr liabilities/ curr assets)
+#          *-price_book: float of price to book ratio
+#          *-price_earnings: float of price to earnings ratio
+#          *-debt_to-assets: float of total debt / curr assets
 #
 class Stock:
 
     # method that returns true or false depending on if current price is
     # less than a factor of week and month prices
     def set_angel_status(self):
-
         # MACRO checking for 20%drop in month or week
-        loss_factor = 0.8
+        loss_factor = 0.85
 
         adj_week_price = self.month_price * loss_factor
         adj_month_price = self.week_price * loss_factor
@@ -55,31 +59,61 @@ class Stock:
         else:
             return False
 
-    # method that returns true or false depending on if current price is
-    # less than a factor of week and month prices
+    # method that adds attributes to stock to better understand valuation
+    # adds all starred attributes; only called when a stock is an angel
     def get_extra_info(self, curr_stock):
-        temp_data = curr_stock.get_key_statistics_data()
-        ticker_symbol = curr_stock.ticker[0]  # for some rzn its list of len 1
-        key_data = temp_data[ticker_symbol]
-        self.test_pe = curr_stock.get_pe_ratio()
-        self.price_book = key_data["priceToBook"]
-        income = key_data["netIncomeToCommon"]
-        shares = key_data["sharesOutstanding"]
-        eps = income / shares
-        self.price_earnings = self.current_price / eps
 
-        temp_sheet = curr_stock.get_financial_stmts("quarterly", "balance")
-        temp2 = temp_sheet["balanceSheetHistoryQuarterly"]
-        temp3 = temp2[ticker_symbol]
-        temp4 = temp3[0]
-        for key in temp4:
-            balance_sheet = temp4[key]
-        temp_finance_data = curr_stock.get_financial_data()
-        finance_data = temp_finance_data[ticker_symbol]
-        self.current_ratio = finance_data["currentRatio"]
-        assets = balance_sheet["totalCurrentAssets"]
-        debt = finance_data["totalDebt"]
-        self.debt_to_assets = assets / debt
+        try:
+            temp_data = curr_stock.get_key_statistics_data()
+            ticker_symbol = curr_stock.ticker[
+                0
+            ]  # for some rzn its list of len 1
+            key_data = temp_data[ticker_symbol]
+        except Exception:
+            print("E: Could not retrieve key statistics")
+        try:
+            self.price_book = key_data["priceToBook"]
+            if self.price_book == None:
+                self.price_book = "N/A"
+        except Exception:
+            self.price_book = "ERRORED"
+        try:
+            income = key_data["netIncomeToCommon"]
+            shares = key_data["sharesOutstanding"]
+            eps = income / shares
+            self.price_earnings = self.current_price / eps
+            if self.price_earnings <= 0:
+                self.price_earnings = "N/A"
+        except Exception:
+            self.price_earnings = "ERRORED"
+
+        try:
+            temp_finance_data = curr_stock.get_financial_data()
+            finance_data = temp_finance_data[ticker_symbol]
+            self.current_ratio = finance_data["currentRatio"]
+            if self.current_ratio == None:
+                self.current_ratio = "N/A"
+        except Exception:
+            self.current_ratio = "ERRORED"
+
+        try:
+            # all of this is unpacking weirdly layered json data
+            temp_sheet = curr_stock.get_financial_stmts("quarterly", "balance")
+            temp2 = temp_sheet["balanceSheetHistoryQuarterly"]
+            temp3 = temp2[ticker_symbol]
+            temp4 = temp3[0]
+            assert len(temp4) == 1
+            for key in temp4:
+                balance_sheet = temp4[key]
+        except Exception:
+            self.debt_to_assets = "ERRORED"
+
+        try:
+            assets = balance_sheet["totalCurrentAssets"]
+            debt = finance_data["totalDebt"]
+            self.debt_to_assets = assets / debt
+        except Exception:
+            self.debt_to_assets = "ERRORED"
 
     # Description: constructor that makes calls to yahoofinance library to
     #             populate stocks attributes
@@ -232,8 +266,6 @@ errored_tickers["BRK.B"] = True
 
 # fills tickers list with every stock symbol in s&p 500
 tickers = sp500_tickers(errored_tickers)
-# stores all stocks that we could not find pull yfinance data for
-
 # stores all stocks we find that match our criteria for a 'fallen angel'.
 angels = []
 
@@ -247,7 +279,6 @@ headers = [
     "Week Price",
     "Week Date",
     "Current Price",
-    "Current Date",
     "Current Date",
     "Angel Status",
     "P/E Ratio",
@@ -288,7 +319,11 @@ for i in range(len(tickers)):  # for limit with requests
     ]
 
     if curr_stock.angel_status == True:
-        angels.append(curr_stock)
+        # to convert this list to html format I use python-tabular, the format
+        # only works correctly with list of lists, which is what temp does.
+        temp = []
+        temp.append(curr_stock.ticker)
+        angels.append(temp)
         curr_row.append(curr_stock.price_earnings)
         curr_row.append(curr_stock.price_book)
         curr_row.append(curr_stock.current_ratio)
@@ -300,11 +335,10 @@ print("\n These were not tracked due to ERRORS:")
 for key in errored_tickers:
     print(key)
 
-print("\n These are the angels:")
-for stock in angels:
-    print(stock.ticker)
-
 with open(filename, "w", newline="") as csvfile:
     csvwriter = csv.writer(csvfile)
     csvwriter.writerow(headers)
     csvwriter.writerows(rows)
+
+# calls send email in email.py which sends report w/ message to recipients
+email_export.send_email(angels)
