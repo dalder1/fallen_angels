@@ -68,8 +68,8 @@ class Stock:
     # adds all starred attributes; only called when a stock is an angel
     def get_extra_info(self, curr_stock):
 
-        temp_data = curr_stock.get_key_statistics_data()
-        key_data = temp_data[curr_stock.ticker]
+        temp_key_data = curr_stock.get_key_statistics_data()
+        key_data = temp_key_data[curr_stock.ticker]
 
         try:
             self.price_book = key_data["priceToBook"]
@@ -87,33 +87,50 @@ class Stock:
         except Exception:
             self.price_earnings = "ERRORED"
 
-        try:
-            temp_finance_data = curr_stock.get_financial_data()
-            finance_data = temp_finance_data[ticker_symbol]
-            self.current_ratio = finance_data["currentRatio"]
-            if self.current_ratio == None:
-                self.current_ratio = "N/A"
-        except Exception:
-            self.current_ratio = "ERRORED"
+        temp_financial_data = curr_stock.get_financial_data()
+        financial_data = temp_financial_data[curr_stock.ticker]
+        self.current_ratio = financial_data["currentRatio"]
 
-        try:
+        sheet = curr_stock.get_financial_stmts('annual', 'balance')
+        balance_sheet = sheet["balanceSheetHistory"]
+        stock_sheet = balance_sheet[curr_stock.ticker]
+        keys = list(stock_sheet[0].keys())
+        assert len(keys) == 1
+        key = keys[0]
+        balanceSheetHistory = (stock_sheet[0])[key]
+
+        total_debt = financial_data["totalDebt"]
+        total_assets = balanceSheetHistory["totalAssets"]
+        self.debt_to_assets = total_assets / total_debt
+
+        
+#        try:
+#            temp_finance_data = curr_stock.get_financial_data()
+#            finance_data = temp_finance_data[ticker_symbol]
+#            self.current_ratio = finance_data["currentRatio"]
+#           if self.current_ratio == None:
+#                self.current_ratio = "N/A"
+#        except Exception:
+#            self.current_ratio = "ERRORED"
+
+#        try:
             # all of this is unpacking weirdly layered json data
-            temp_sheet = curr_stock.get_financial_stmts("quarterly", "balance")
-            temp2 = temp_sheet["balanceSheetHistoryQuarterly"]
-            temp3 = temp2[ticker_symbol]
-            temp4 = temp3[0]
-            assert len(temp4) == 1
-            for key in temp4:
-                balance_sheet = temp4[key]
-        except Exception:
-            self.debt_to_assets = "ERRORED"
+#            temp_sheet = curr_stock.get_financial_stmts("quarterly", "balance")
+#            temp2 = temp_sheet["balanceSheetHistoryQuarterly"]
+#            temp3 = temp2[ticker_symbol]
+#            temp4 = temp3[0]
+#            assert len(temp4) == 1
+#            for key in temp4:
+#                balance_sheet = temp4[key]
+#        except Exception:
+#            self.debt_to_assets = "ERRORED"
 
-        try:
-            assets = balance_sheet["totalCurrentAssets"]
-            debt = finance_data["totalDebt"]
-            self.debt_to_assets = assets / debt
-        except Exception:
-            self.debt_to_assets = "ERRORED"
+#        try:
+#            assets = balance_sheet["totalCurrentAssets"]
+#            debt = finance_data["totalDebt"]
+#            self.debt_to_assets = assets / debt
+#        except Exception:
+#            self.debt_to_assets = "ERRORED"
 
     # Description: constructor that makes calls to yahoofinance library to
     #             populate stocks attributes
