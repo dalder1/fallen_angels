@@ -18,10 +18,14 @@ from datetime import date, timedelta
 
 # for retrieving stock data
 # import yfinance as yf
-from yahoofinancials import YahooFinancials
+from yahoofinancials import yahoofinancials
+
+import time
 
 # for writing data out to csv file for inspection
 import csv
+
+import concurrent.futures
 
 # Class for each individual stock gotten from yahoofinance library
 # Functions: Constructor,
@@ -87,21 +91,24 @@ class Stock:
         except Exception:
             self.price_earnings = "ERRORED"
 
-        temp_financial_data = curr_stock.get_financial_data()
-        financial_data = temp_financial_data[curr_stock.ticker]
-        self.current_ratio = financial_data["currentRatio"]
+        try:
+            temp_financial_data = curr_stock.get_financial_data()
+            financial_data = temp_financial_data[curr_stock.ticker]
+            self.current_ratio = financial_data["currentRatio"]
 
-        sheet = curr_stock.get_financial_stmts('annual', 'balance')
-        balance_sheet = sheet["balanceSheetHistory"]
-        stock_sheet = balance_sheet[curr_stock.ticker]
-        keys = list(stock_sheet[0].keys())
-        assert len(keys) == 1
-        key = keys[0]
-        balanceSheetHistory = (stock_sheet[0])[key]
+            sheet = curr_stock.get_financial_stmts('annual', 'balance')
+            balance_sheet = sheet["balanceSheetHistory"]
+            stock_sheet = balance_sheet[curr_stock.ticker]
+            keys = list(stock_sheet[0].keys())
+            assert len(keys) == 1
+            key = keys[0]
+            balanceSheetHistory = (stock_sheet[0])[key]
 
-        total_debt = financial_data["totalDebt"]
-        total_assets = balanceSheetHistory["totalAssets"]
-        self.debt_to_assets = total_assets / total_debt
+            total_debt = financial_data["totalDebt"]
+            total_assets = balanceSheetHistory["totalAssets"]
+            self.debt_to_assets = total_assets / total_debt
+        except Exception:
+            print(self.ticker, " errored real bad")
 
         
 #        try:
@@ -174,16 +181,16 @@ class Stock:
             # extracts only closing price and date from all the objects.
             closing_prices.append(stock_prices[i]["close"])
             closing_dates.append(stock_prices[i]["formatted_date"])
-
+        
         self.month_price = closing_prices[0]
         self.month_date = closing_dates[0]
-        self.week_price = closing_prices[14]
-        self.week_date = closing_dates[14]
-        self.current_price = closing_prices[19]
-        self.current_date = closing_dates[19]
+        self.week_price = closing_prices[13]
+        self.week_date = closing_dates[13]
+        self.current_price = closing_prices[18]
+        self.current_date = closing_dates[18]
         self.ticker = ticker_symbol
         self.angel_status = self.set_angel_status()
-        if self.angel_status == True:
+        if self.angel_status == True or True:
             self.get_extra_info(curr_stock)
         self.errored = False
 
@@ -197,9 +204,9 @@ def retrieve_stock_info(ticker_name, errored_tickers, start_date, end_date):
     curr_stock = None
 
     try:
-
-        # call to library to get object
-        yf_object = YahooFinancials(ticker_name)
+        #  call to library to get object
+        yf_object = yahoofinancials.YahooFinancials(ticker_name)
+        yf_object.daniel_test()
     except Exception:
         print(ticker_name + "new error from getting object from library")
         return None
@@ -310,7 +317,15 @@ today = get_today()
 start_date = (today - timedelta(days=28)).strftime("%Y-%m-%d")
 end_date = today.strftime("%Y-%m-%d")
 
+# stock = yahoofinancials.YahooFinancials("APPL")
+# print(stock, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+# curr_stock = retrieve_stock_info("AAPL", errored_tickers, start_date, end_date)
+# print(curr_stock)
+# exit()
+start_time = time.perf_counter()
 for i in range(len(tickers)):  # for limit with requests
+# with concurrent.futures.ThreadPoolExecutor() as executor:
+    # for temp_symbol in tickers:
     temp_symbol = tickers[i]
     curr_stock = retrieve_stock_info(
         temp_symbol, errored_tickers, start_date, end_date
@@ -318,37 +333,40 @@ for i in range(len(tickers)):  # for limit with requests
     if i % 50 == 0:
         print(str(i / 5) + "% done")
     # if returned None then the function errored at a certain try block
-    if curr_stock.errored == True:
-        print("adding ", temp_symbol, " to list of errored tickers")
-        errored_tickers[temp_symbol] = True
-        curr_row = [temp_symbol, "ERRORED", curr_stock.error_message]
+    if curr_stock == None:
+        print(temp_symbol, " errored bad")
+    else:
+        if curr_stock.errored == True:
+            print("adding ", temp_symbol, " to list of errored tickers")
+            errored_tickers[temp_symbol] = True
+            curr_row = [temp_symbol, "ERRORED", curr_stock.error_message]
+            rows.append(curr_row)
+            continue
+
+        curr_row = [
+            curr_stock.ticker,
+            curr_stock.month_price,
+            curr_stock.month_date,
+            curr_stock.week_price,
+            curr_stock.week_date,
+            curr_stock.current_price,
+            curr_stock.current_date,
+            curr_stock.angel_status,
+        ]
+
+        # if curr_stock.angel_status == True:
+        #     # to convert this list to html format I use python-tabular, the format
+        #     # only works correctly with list of lists, which is what temp does.
+        #     temp = []
+        #     temp.append(curr_stock.ticker)
+        #     angels.append(temp)
+        #     curr_row.append(curr_stock.price_earnings)
+        #     curr_row.append(curr_stock.price_book)
+        #     curr_row.append(curr_stock.current_ratio)
+        #     curr_row.append(curr_stock.debt_to_assets)
         rows.append(curr_row)
-        continue
-
-    curr_row = [
-        curr_stock.ticker,
-        curr_stock.month_price,
-        curr_stock.month_date,
-        curr_stock.week_price,
-        curr_stock.week_date,
-        curr_stock.current_price,
-        curr_stock.current_date,
-        curr_stock.angel_status,
-    ]
-
-    if curr_stock.angel_status == True:
-        # to convert this list to html format I use python-tabular, the format
-        # only works correctly with list of lists, which is what temp does.
-        temp = []
-        temp.append(curr_stock.ticker)
-        angels.append(temp)
-        curr_row.append(curr_stock.price_earnings)
-        curr_row.append(curr_stock.price_book)
-        curr_row.append(curr_stock.current_ratio)
-        curr_row.append(curr_stock.debt_to_assets)
-
-    rows.append(curr_row)
-
+end_time = time.perf_counter()
+print("getting tickers took this much time: ", end_time, "\n")
 print("\n These were not tracked due to ERRORS:")
 for key in errored_tickers:
     print(key)

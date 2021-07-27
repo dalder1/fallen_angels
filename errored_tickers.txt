@@ -1,0 +1,19 @@
+0.0% done
+10.0% done
+adding  BRK.B  to list of errored tickers
+adding  BF.B  to list of errored tickers
+CRL  errored real bad
+20.0% done
+30.0% done
+40.0% done
+50.0% done
+ISRG  errored real bad
+60.0% done
+70.0% done
+ODFL  errored real bad
+OGN  errored real bad
+PWR  errored real bad
+80.0% done
+90.0% done
+UDR  errored real bad
+100.0% done
