@@ -18,7 +18,9 @@ from datetime import date, timedelta
 
 # for retrieving stock data
 # import yfinance as yf
-from yahoofinancials import yahoofinancials
+# from yahoofinancials import yahoofinancials
+from yahoofinancialslocal import YahooFinancials
+
 
 import time
 
@@ -147,6 +149,7 @@ class Stock:
 
         try:
             # retrieving dict with all historical price data for this stock
+            print("get histroicla price data")
             historical_price_data = curr_stock.get_historical_price_data(
                 start_date, end_date, "daily"
             )
@@ -192,6 +195,7 @@ class Stock:
         self.angel_status = self.set_angel_status()
         if self.angel_status == True or True:
             self.get_extra_info(curr_stock)
+            print(self.debt_to_assets)
         self.errored = False
 
 
@@ -205,8 +209,7 @@ def retrieve_stock_info(ticker_name, errored_tickers, start_date, end_date):
 
     try:
         #  call to library to get object
-        yf_object = yahoofinancials.YahooFinancials(ticker_name)
-        yf_object.daniel_test()
+        yf_object = YahooFinancials(ticker_name)
     except Exception:
         print(ticker_name + "new error from getting object from library")
         return None
@@ -285,8 +288,8 @@ def sp500_tickers(errored_tickers):
 # stores all stocks that we could not find pull yfinance data for
 errored_tickers = dict()
 # stocks known to error
-#errored_tickers["BF.B"] = True
-#errored_tickers["BRK.B"] = True
+errored_tickers["BF.B"] = True
+errored_tickers["BRK.B"] = True
 
 # fills tickers list with every stock symbol in s&p 500
 tickers = sp500_tickers(errored_tickers)
@@ -317,11 +320,6 @@ today = get_today()
 start_date = (today - timedelta(days=28)).strftime("%Y-%m-%d")
 end_date = today.strftime("%Y-%m-%d")
 
-# stock = yahoofinancials.YahooFinancials("APPL")
-# print(stock, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-# curr_stock = retrieve_stock_info("AAPL", errored_tickers, start_date, end_date)
-# print(curr_stock)
-# exit()
 start_time = time.perf_counter()
 for i in range(len(tickers)):  # for limit with requests
 # with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -335,6 +333,8 @@ for i in range(len(tickers)):  # for limit with requests
     # if returned None then the function errored at a certain try block
     if curr_stock == None:
         print(temp_symbol, " errored bad")
+        errored_tickers[temp_symbol] = True
+
     else:
         if curr_stock.errored == True:
             print("adding ", temp_symbol, " to list of errored tickers")
@@ -365,6 +365,7 @@ for i in range(len(tickers)):  # for limit with requests
         #     curr_row.append(curr_stock.current_ratio)
         #     curr_row.append(curr_stock.debt_to_assets)
         rows.append(curr_row)
+
 end_time = time.perf_counter()
 print("getting tickers took this much time: ", end_time, "\n")
 print("\n These were not tracked due to ERRORS:")
@@ -375,6 +376,10 @@ with open(filename, "w", newline="") as csvfile:
     csvwriter = csv.writer(csvfile)
     csvwriter.writerow(headers)
     csvwriter.writerows(rows)
+
+with open("errored-tickers", "w", newline="") as csvfile:
+    csvwriter = csv.writer(csvfile)
+    csvwriter.writerows(errored_tickers)
 
 # calls send email in email.py which sends report w/ message to recipients
 email_export.send_email(angels)
