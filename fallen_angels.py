@@ -2,7 +2,7 @@
 # Identifies fallen angels stocks worthy of investment
 #
 # Created: 12/23/2019
-# Last Editied: 12/23/2019
+# Last Editied: 8/`14/2021
 # Author: Daniel Alderman
 # Email: daniel.alderman@tufts.edu
 # -----------------------------------------------------------
@@ -17,8 +17,6 @@ import requests
 from datetime import date, timedelta
 
 # for retrieving stock data
-# import yfinance as yf
-# from yahoofinancials import yahoofinancials
 from yahoofinancialslocal import YahooFinancials
 
 
@@ -27,10 +25,9 @@ import time
 # for writing data out to csv file for inspection
 import csv
 
-import concurrent.futures
 
-# Class for each individual stock gotten from yahoofinance library
-# Functions: Constructor,
+# Class for each individual stock gotten from yahoofinance library.
+# Functions: Constructor, set_angel_status, get_extra_info
 # Attributes:
 #           -errored: boolean if there was an error retrieving some data
 #           -current_price: close price of most recent trading day
@@ -49,14 +46,14 @@ import concurrent.futures
 #
 class Stock:
 
-    # method that returns true or false depending on if current price is
-    # less than a factor of week and month prices
+    # Method that returns true or false depending on if current price is
+    # less than a factor of the pas week's and month's prices.
     def set_angel_status(self):
-        # MACRO checking for 20%drop in month or week
-        loss_factor = 0.85
+        # MACRO checking for 15% drop in month or week
+        LOSS_FACTOR = 0.85
 
-        adj_week_price = self.month_price * loss_factor
-        adj_month_price = self.week_price * loss_factor
+        adj_week_price = self.month_price * LOSS_FACTOR
+        adj_month_price = self.week_price * LOSS_FACTOR
 
         
         try:
@@ -70,8 +67,8 @@ class Stock:
             print(self.ticker)
             return False
 
-    # method that adds attributes to stock to better understand valuation
-    # adds all starred attributes; only called when a stock is an angel
+    # Method that adds attributes to stock to better understand valuation.
+    # Adds all starred attributes; only called when a stock is an angel
     def get_extra_info(self, curr_stock):
 
         temp_key_data = curr_stock.get_key_statistics_data()
@@ -110,46 +107,18 @@ class Stock:
             total_assets = balanceSheetHistory["totalAssets"]
             self.debt_to_assets = total_assets / total_debt
         except Exception:
+            self.debt_to_assets = "ERRORED"
+            self.current_ratio = "ERRORED"
             print(self.ticker, " errored real bad")
 
-        
-#        try:
-#            temp_finance_data = curr_stock.get_financial_data()
-#            finance_data = temp_finance_data[ticker_symbol]
-#            self.current_ratio = finance_data["currentRatio"]
-#           if self.current_ratio == None:
-#                self.current_ratio = "N/A"
-#        except Exception:
-#            self.current_ratio = "ERRORED"
-
-#        try:
-            # all of this is unpacking weirdly layered json data
-#            temp_sheet = curr_stock.get_financial_stmts("quarterly", "balance")
-#            temp2 = temp_sheet["balanceSheetHistoryQuarterly"]
-#            temp3 = temp2[ticker_symbol]
-#            temp4 = temp3[0]
-#            assert len(temp4) == 1
-#            for key in temp4:
-#                balance_sheet = temp4[key]
-#        except Exception:
-#            self.debt_to_assets = "ERRORED"
-
-#        try:
-#            assets = balance_sheet["totalCurrentAssets"]
-#            debt = finance_data["totalDebt"]
-#            self.debt_to_assets = assets / debt
-#        except Exception:
-#            self.debt_to_assets = "ERRORED"
-
-    # Description: constructor that makes calls to yahoofinance library to
-    #             populate stocks attributes
+    # Description: Constructor that makes calls to YahooFinance  to
+    #             populate stocks attributes.
     # Parameters: curr_stock-yahoofinance object; ticker_symbol-string of ticker
     #
     def __init__(self, curr_stock, ticker_symbol, start_date, end_date):
 
         try:
             # retrieving dict with all historical price data for this stock
-            print("get histroicla price data")
             historical_price_data = curr_stock.get_historical_price_data(
                 start_date, end_date, "daily"
             )
@@ -193,15 +162,15 @@ class Stock:
         self.current_date = closing_dates[18]
         self.ticker = ticker_symbol
         self.angel_status = self.set_angel_status()
-        if self.angel_status == True or True:
+        if self.angel_status == True :
             self.get_extra_info(curr_stock)
             print(self.debt_to_assets)
         self.errored = False
 
 
-# method that makes api call to tiingo to retrieve price close for
+# Method that makes api call to YahooFinancials to retrieve price close for
 # for today and one month ago today. Returns an object that contains
-# these prices and the ticker name, as well as the entire json file
+# these prices and the ticker name, as well as other key metrics.
 def retrieve_stock_info(ticker_name, errored_tickers, start_date, end_date):
 
     # stock object we will return
@@ -219,8 +188,8 @@ def retrieve_stock_info(ticker_name, errored_tickers, start_date, end_date):
     return curr_stock
 
 
-# - method that returns the most reecent open market day in datetime object.
-# - If weekend returns most recent friday. Also accounts for holidays and
+# - Returns the most reecent open market day in datetime object.
+# - If it's a weekend returns most recent friday, lso accounts for holidays and
 # goes back to most recent open day.
 # - Uses: list_holidays.txt which is a .txt file w/ all nyse holidays
 # through 2022 in m/d/yyyy format w/ a '*' if it is a half day
@@ -255,7 +224,7 @@ def get_today():
     return today
 
 
-# method that scrapes tickers of every s%p 500 stock and adds them to a list
+# Scrapes tickers of every s%p 500 stock and adds them to a list
 # this method is based off a script described by sentdex in a youtube tutorial
 # Return:  list of strings
 #
@@ -277,19 +246,14 @@ def sp500_tickers(errored_tickers):
         tickers.append(ticker)
     return tickers
 
-
 #
 #
 # Main Function
 #
 #
 
-
-# stores all stocks that we could not find pull yfinance data for
+# stores all stocks that we could not pull data for
 errored_tickers = dict()
-# stocks known to error
-errored_tickers["BF.B"] = True
-errored_tickers["BRK.B"] = True
 
 # fills tickers list with every stock symbol in s&p 500
 tickers = sp500_tickers(errored_tickers)
@@ -320,10 +284,7 @@ today = get_today()
 start_date = (today - timedelta(days=28)).strftime("%Y-%m-%d")
 end_date = today.strftime("%Y-%m-%d")
 
-start_time = time.perf_counter()
-for i in range(len(tickers)):  # for limit with requests
-# with concurrent.futures.ThreadPoolExecutor() as executor:
-    # for temp_symbol in tickers:
+for i in range(len(tickers)):
     temp_symbol = tickers[i]
     curr_stock = retrieve_stock_info(
         temp_symbol, errored_tickers, start_date, end_date
@@ -354,16 +315,16 @@ for i in range(len(tickers)):  # for limit with requests
             curr_stock.angel_status,
         ]
 
-        # if curr_stock.angel_status == True:
-        #     # to convert this list to html format I use python-tabular, the format
-        #     # only works correctly with list of lists, which is what temp does.
-        #     temp = []
-        #     temp.append(curr_stock.ticker)
-        #     angels.append(temp)
-        #     curr_row.append(curr_stock.price_earnings)
-        #     curr_row.append(curr_stock.price_book)
-        #     curr_row.append(curr_stock.current_ratio)
-        #     curr_row.append(curr_stock.debt_to_assets)
+        if curr_stock.angel_status == True:
+            # to convert this list to html format I use python-tabular, the format
+            # only works correctly with list of lists, which is what temp does.
+            temp = []
+            temp.append(curr_stock.ticker)
+            angels.append(temp)
+            curr_row.append(curr_stock.price_earnings)
+            curr_row.append(curr_stock.price_book)
+            curr_row.append(curr_stock.current_ratio)
+            curr_row.append(curr_stock.debt_to_assets)
         rows.append(curr_row)
 
 end_time = time.perf_counter()
